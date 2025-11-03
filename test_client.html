@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>聊天测试客户端</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .login-form {
+            margin-bottom: 20px;
+        }
+        .login-form input {
+            padding: 10px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            width: 200px;
+        }
+        .login-form button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .login-form button:hover {
+            background: #0056b3;
+        }
+        .chat-container {
+            display: none;
+        }
+        .messages {
+            height: 400px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            overflow-y: auto;
+            background: #fafafa;
+            margin-bottom: 10px;
+        }
+        .message {
+            margin: 5px 0;
+            padding: 8px;
+            border-radius: 5px;
+        }
+        .message.own {
+            background: #007bff;
+            color: white;
+            text-align: right;
+        }
+        .message.other {
+            background: #e9ecef;
+        }
+        .message.system {
+            background: #28a745;
+            color: white;
+            text-align: center;
+            font-style: italic;
+        }
+        .input-area {
+            display: flex;
+            gap: 10px;
+        }
+        .input-area input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .input-area button {
+            padding: 10px 20px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .input-area button:hover {
+            background: #1e7e34;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>聊天测试客户端</h1>
+        
+        <div class="login-form" id="loginForm">
+            <input type="text" id="username" placeholder="用户名" required>
+            <input type="text" id="roomId" placeholder="房间ID" value="general" required>
+            <button onclick="connect()">连接</button>
+        </div>
+
+        <div class="status" id="status">未连接</div>
+
+        <div class="chat-container" id="chatContainer">
+            <div class="messages" id="messages"></div>
+            <div class="input-area">
+                <input type="text" id="messageInput" placeholder="输入消息..." onkeypress="handleKeyPress(event)">
+                <button onclick="sendMessage()">发送</button>
+                <button onclick="disconnect()">断开连接</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let username = '';
+        let roomId = '';
+
+        function connect() {
+            username = document.getElementById('username').value.trim();
+            roomId = document.getElementById('roomId').value.trim();
+            
+            if (!username || !roomId) {
+                alert('请输入用户名和房间ID');
+                return;
+            }
+
+            try {
+                ws = new WebSocket('ws://localhost:8080');
+                
+                ws.onopen = function() {
+                    updateStatus('已连接', 'connected');
+                    document.getElementById('loginForm').style.display = 'none';
+                    document.getElementById('chatContainer').style.display = 'block';
+                    
+                    // 发送加入房间消息
+                    const joinMessage = {
+                        type: 'join',
+                        username: username,
+                        room_id: roomId
+                    };
+                    ws.send(JSON.stringify(joinMessage));
+                    
+                    addMessage(`已加入房间: ${roomId}`, 'system');
+                };
+
+                ws.onmessage = function(event) {
+                    try {
+                        const message = JSON.parse(event.data);
+                        handleMessage(message);
+                    } catch (e) {
+                        console.error('解析消息失败:', e);
+                    }
+                };
+
+                ws.onclose = function() {
+                    updateStatus('连接已断开', 'disconnected');
+                    document.getElementById('loginForm').style.display = 'block';
+                    document.getElementById('chatContainer').style.display = 'none';
+                };
+
+                ws.onerror = function(error) {
+                    console.error('WebSocket错误:', error);
+                    updateStatus('连接错误', 'disconnected');
+                };
+
+            } catch (error) {
+                console.error('连接失败:', error);
+                alert('连接失败，请检查服务器是否运行');
+            }
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const content = input.value.trim();
+            
+            if (!content || !ws) {
+                return;
+            }
+
+            const message = {
+                type: 'message',
+                username: username,
+                room_id: roomId,
+                content: content,
+                timestamp: Math.floor(Date.now() / 1000)
+            };
+
+            ws.send(JSON.stringify(message));
+            input.value = '';
+        }
+
+        function handleMessage(message) {
+            switch (message.type) {
+                case 'message':
+                    const isOwn = message.username === username;
+                    const messageText = `${message.username}: ${message.content}`;
+                    addMessage(messageText, isOwn ? 'own' : 'other');
+                    break;
+                
+                case 'user_joined':
+                    if (message.username !== username) {
+                        addMessage(`${message.username} 加入了房间`, 'system');
+                    }
+                    break;
+                
+                case 'user_left':
+                    addMessage(`${message.username} 离开了房间`, 'system');
+                    break;
+                
+                case 'error':
+                    addMessage(`错误: ${message.message}`, 'system');
+                    break;
+                
+                default:
+                    console.log('未知消息类型:', message);
+            }
+        }
+
+        function addMessage(text, type) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.textContent = text;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function updateStatus(text, className) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = text;
+            statusDiv.className = `status ${className}`;
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+    </script>
+</body>
+</html>
