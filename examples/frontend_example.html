@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>帖子状态检查 - 前端示例</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        .post-list {
+            margin: 20px 0;
+        }
+        .post-item {
+            padding: 15px;
+            margin: 10px 0;
+            background: #f9f9f9;
+            border-left: 4px solid #4CAF50;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .post-item:hover {
+            background: #e8f5e9;
+            transform: translateX(5px);
+        }
+        .post-item.deleted {
+            border-left-color: #f44336;
+            opacity: 0.6;
+        }
+        .post-item.locked {
+            border-left-color: #ff9800;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        .status-normal {
+            background: #4CAF50;
+            color: white;
+        }
+        .status-deleted {
+            background: #f44336;
+            color: white;
+        }
+        .status-locked {
+            background: #ff9800;
+            color: white;
+        }
+        .status-not-found {
+            background: #9e9e9e;
+            color: white;
+        }
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            background: #323232;
+            color: white;
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            display: none;
+            z-index: 1000;
+        }
+        .toast.show {
+            display: block;
+            animation: slideIn 0.3s;
+        }
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        .code-block {
+            background: #f4f4f4;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin: 15px 0;
+        }
+        .code-block code {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .log {
+            background: #f4f4f4;
+            padding: 15px;
+            border-radius: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+        }
+        .log-success {
+            color: #4CAF50;
+        }
+        .log-error {
+            color: #f44336;
+        }
+        .log-info {
+            color: #2196F3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📝 帖子状态检查 - 前端示例</h1>
+        
+        <p>这个示例演示了如何在用户点击进入详情页前，先检查帖子状态。</p>
+        
+        <h2>模拟帖子列表</h2>
+        <div class="post-list">
+            <div class="post-item" onclick="enterPostDetail(1000)">
+                <strong>帖子 #1000</strong> - 正常帖子
+                <span class="status-badge status-normal">正常</span>
+            </div>
+            <div class="post-item deleted" onclick="enterPostDetail(1001)">
+                <strong>帖子 #1001</strong> - 已删除的帖子
+                <span class="status-badge status-deleted">已删除</span>
+            </div>
+            <div class="post-item locked" onclick="enterPostDetail(1002)">
+                <strong>帖子 #1002</strong> - 已锁定的帖子
+                <span class="status-badge status-locked">已锁定</span>
+            </div>
+            <div class="post-item" onclick="enterPostDetail(999999)">
+                <strong>帖子 #999999</strong> - 不存在的帖子
+                <span class="status-badge status-not-found">不存在</span>
+            </div>
+        </div>
+        
+        <h2>操作日志</h2>
+        <div class="log" id="log"></div>
+        
+        <button onclick="clearLog()">清空日志</button>
+        
+        <h2>前端代码示例</h2>
+        <div class="code-block">
+            <code><pre>
+// 用户点击进入详情页
+async function enterPostDetail(postId) {
+    addLog('info', `用户点击进入帖子 #${postId}`);
+    
+    // 1. 先检查帖子状态
+    addLog('info', '正在检查帖子状态...');
+    const status = await checkPostStatus(postId);
+    
+    // 2. 根据状态决定是否继续
+    if (!status.exists) {
+        showToast('❌ 帖子不存在');
+        addLog('error', '帖子不存在，阻止进入');
+        return;
+    }
+    
+    if (status.deleted) {
+        showToast('❌ 帖子已被删除');
+        addLog('error', '帖子已被删除，阻止进入');
+        return;
+    }
+    
+    if (status.locked) {
+        showToast('⚠️ 帖子已锁定，无法评论');
+        addLog('info', '帖子已锁定，可查看但无法评论');
+        // 可以继续查看，但禁用评论功能
+    }
+    
+    // 3. 正常进入详情页
+    showToast('✅ 进入帖子详情页');
+    addLog('success', '帖子状态正常，加载详情页');
+    loadPostDetail(postId);
+}
+
+// 检查帖子状态
+async function checkPostStatus(postId) {
+    const response = await fetch(
+        `/api/posts/${postId}/status?ts=...&sig=...`
+    );
+    const result = await response.json();
+    return result.data;
+}
+            </pre></code>
+        </div>
+    </div>
+    
+    <div class="toast" id="toast"></div>
+    
+    <script>
+        // 显示提示消息
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+        
+        // 添加日志
+        function addLog(type, message) {
+            const log = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `[${timestamp}] ${message}`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+        
+        // 清空日志
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+        
+        // 模拟检查帖子状态
+        async function checkPostStatus(postId) {
+            // 模拟不同的帖子状态
+            await new Promise(resolve => setTimeout(resolve, 500)); // 模拟网络延迟
+            
+            if (postId === 1000) {
+                return { exists: true, deleted: false, locked: false, message: '帖子正常' };
+            } else if (postId === 1001) {
+                return { exists: true, deleted: true, locked: false, message: '帖子已被删除' };
+            } else if (postId === 1002) {
+                return { exists: true, deleted: false, locked: true, message: '帖子已锁定' };
+            } else {
+                return { exists: false, deleted: false, locked: false, message: '帖子不存在' };
+            }
+        }
+        
+        // 用户点击进入详情页
+        async function enterPostDetail(postId) {
+            addLog('info', `用户点击进入帖子 #${postId}`);
+            
+            // 1. 先检查帖子状态
+            addLog('info', '正在检查帖子状态...');
+            const status = await checkPostStatus(postId);
+            
+            // 2. 根据状态决定是否继续
+            if (!status.exists) {
+                showToast('❌ 帖子不存在');
+                addLog('error', '帖子不存在，阻止进入');
+                return;
+            }
+            
+            if (status.deleted) {
+                showToast('❌ 帖子已被删除');
+                addLog('error', '帖子已被删除，阻止进入');
+                return;
+            }
+            
+            if (status.locked) {
+                showToast('⚠️ 帖子已锁定，无法评论');
+                addLog('info', '帖子已锁定，可查看但无法评论');
+                // 可以继续查看，但禁用评论功能
+            }
+            
+            // 3. 正常进入详情页
+            showToast('✅ 进入帖子详情页');
+            addLog('success', '帖子状态正常，加载详情页');
+            loadPostDetail(postId);
+        }
+        
+        // 加载帖子详情
+        function loadPostDetail(postId) {
+            addLog('info', `加载帖子 #${postId} 的详情...`);
+            addLog('info', `加载评论列表...`);
+            addLog('success', `详情页加载完成`);
+        }
+        
+        // 页面加载时显示欢迎信息
+        window.onload = function() {
+            addLog('info', '页面加载完成，点击上方的帖子查看效果');
+        };
+    </script>
+</body>
+</html>

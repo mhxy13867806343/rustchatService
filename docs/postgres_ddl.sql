@@ -12,6 +12,11 @@ CREATE TABLE IF NOT EXISTS posts (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 为 posts 表添加索引
+CREATE INDEX IF NOT EXISTS idx_posts_author_id ON posts(author_id);
+CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_posts_not_deleted ON posts(id) WHERE deleted_at IS NULL;
+
 -- 二层评论：一级评论的 parent_comment_id = NULL；二级评论指向一级
 CREATE TABLE IF NOT EXISTS comments (
     id                      BIGSERIAL PRIMARY KEY,
@@ -33,6 +38,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_comment_idem
 CREATE INDEX IF NOT EXISTS idx_comments_post_not_deleted
     ON comments(post_id)
     WHERE deleted_at IS NULL;
+
+-- 为评论添加按时间降序的索引（最新的在前面）
+CREATE INDEX IF NOT EXISTS idx_comments_post_created_desc
+    ON comments(post_id, created_at DESC)
+    WHERE deleted_at IS NULL AND parent_comment_id IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_comments_parent_created_desc
+    ON comments(parent_comment_id, created_at DESC)
+    WHERE deleted_at IS NULL AND parent_comment_id IS NOT NULL;
 
 -- reactions: 点赞/收藏
 CREATE TABLE IF NOT EXISTS reactions (
